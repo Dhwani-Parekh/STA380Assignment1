@@ -1,0 +1,619 @@
+---
+title: "Homework1-STA380"
+output: word_document
+Author: Dhwani Parekh
+---
+#Question 1 - Exploratory Data Analysis
+
+####Objective:
+
+1. Whether voting certain kinds of voting equipment lead to higher rates of undercount
+
+2. If so, whether we should worry that this effect has a disparate impact on poor and minority communities.  
+
+```{r}
+library(ggplot2)
+
+#Reading the dataset
+georgia <- read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/georgia2000.csv")
+```
+
+Exploring the dataset:
+
+```{r}
+#Difference b/n ballots cast and votes recorded
+attach(georgia)
+votes.diff <- sum(ballots) - sum(votes)
+votes.diff
+```
+
+Out of 2.691M ballots cast, only 2.596M votes were recorded. 
+
+####94,681 votes were not counted.
+
+Plotting undercounts by counties:
+
+```{r}
+par(mfrow =c(1,1))
+plot(county,ballots - votes)
+
+#Adding variables to the dataset
+georgia$county.undercount <- ballots - votes
+georgia$county.undercount.per <- (georgia$county.undercount/ballots) *100
+
+max.issue <- which.max(georgia$county.undercount.scaled)
+county.max.issue <- georgia[max.issue,1]
+```
+
+Fulton county had maximum undercount.
+
+```{r}
+#Order data by maximum issue
+georgia.sorted <- georgia[order(-georgia$county.undercount,-georgia$county.undercount.per),]
+head(georgia.sorted)
+
+par(mfrow =c(1,2))
+
+#plot(county,georgia$county.undercount.scaled)
+plot(equip,georgia$county.undercount, main = "Equipment vs Undercount", xlab = "Equipment", ylab = "Undercount(#)")
+plot(equip,georgia$county.undercount.per,main = "Equipment vs Undercount %age", xlab = "Equipment", ylab = "Undercount(%)")
+```
+
+By looking at the plots of absolute numbers, we see that "Punch" and "Optical" seem to face more problem than other equipments. On plotting the percentage of undercounts by equipment in a county, we don't see a large variation among equipments.
+
+Hence, trying a simple linear regression to test the relationship between undercounts and equipment:
+
+```{r}
+#Simple linear regression
+lm.undercount <- lm(county.undercount ~ equip, data = georgia)
+summary(lm.undercount)
+
+```
+
+By regressing undercount with respect to equipment, we observe "punch"" to be statistically significant. Hence, voters who voted via "punch" were unable to record their votes significantly.
+
+To determine whether this issue affected poor and the minorities, we shall compare counties via voting method
+
+```{r}
+georgia.punch = subset(georgia,georgia$equip == "PUNCH")
+
+round(sum(georgia.punch$poor)/nrow(georgia.punch) * 100,1)
+```
+
+41% of counties which voted via Punch have 25% of residents living 1.5 times below federal poverty line
+
+```{r}
+#Sorting data by %age undercounts per county
+georgia.punch.sorted <- georgia.punch[order(-georgia.punch$county.undercount.per,-georgia.punch$county.undercount),]
+head(georgia.punch.sorted)
+```
+
+Out of top 6 counties, by percentage of undercount as compared to ballots, we see 5 out of 6 counties to be labeled as "poor".
+
+```{r}
+# %age of poor counties?
+aggregate(georgia$poor, by=list(equip), FUN=mean, na.rm=TRUE)
+```
+
+On comparison of "Punch" with counties which opted for other equiment method, we cannot strongly state that the poor were affected
+
+```{r}
+#Average and median AA population in communities which voted via Punch?
+aggregate(georgia$perAA, by=list(equip), FUN=mean, na.rm=TRUE)
+
+#Average and median AA population in communities which voted via Punch?
+aggregate(georgia$perAA, by=list(equip), FUN=median, na.rm=TRUE)
+
+#median(head(georgia.punch.sorted$perAA))
+
+#Plots
+#ggplot(data=georgia, aes(x=equip, y=county.undercount.per, fill=poor)) +  geom_bar(stat="identity", position=position_dodge(), colour="black")
+
+```
+
+We see around 30% minorty population on an average in counties which voted via "punch". Top 6 counties affected have 38% African-American population on an average.
+
+On comparison with counties which opted for a different voting methods, we cannot justify african americans being affected by "punch" equipment.
+
+#Question 2 - Portflio Analysis
+
+####Objective:
+Considering the below five asset classes:
+.	US domestic equities (SPY: the S&P 500 stock index)
+.	US Treasury bonds (TLT)
+.	Investment-grade corporate bonds (LQD)
+.	Emerging-market equities (EEM)
+.	Real estate (VNQ
+
+Suppose there is a notional $100,000 to invest in one of the mentioned portfolios. Write a brief report that:  
+
+1. marshals appropriate evidence to characterize the risk/return properties of the five major asset classes listed above.  
+
+2. outlines your choice of the "safe" and "aggressive" portfolios. 
+
+3. uses bootstrap resampling to estimate the 4-week (20 trading day) value at risk of each of your three portfolios at the 5% level.  
+ 
+```{r}
+library(mosaic)
+library(fImport)
+library(foreach)
+
+# Import a few stocks
+mystocks = c("SPY", "TLT", "LQD","EEM","VNQ")
+myprices = yahooSeries(mystocks, from='2010-07-01', to='2015-06-30')
+#head(myprices)
+#tail(myprices)
+#nrow(myprices)
+
+#Returns on each day : %age of closing price on day x as compared to day (x-1)
+
+YahooPricesToReturns = function(series) {
+  mycols = grep('Adj.Close', colnames(series))
+  closingprice = series[,mycols]
+  N = nrow(closingprice)
+  percentreturn = as.data.frame(closingprice[2:N,]) / as.data.frame(closingprice[1:(N-1),]) - 1
+  mynames = strsplit(colnames(percentreturn), '.', fixed=TRUE)
+  mynames = lapply(mynames, function(x) return(paste0(x[1], ".PctReturn")))
+  colnames(percentreturn) = mynames
+  as.matrix(na.omit(percentreturn))
+}
+
+#Creating a vector/list of returns for all stocks
+myreturns = YahooPricesToReturns(myprices)
+
+#First 6 days of returns for each stock
+#head(myreturns)
+
+#Converting the list to a dataframe
+myreturns.df <- as.data.frame(myreturns)
+#summary(myreturns.df)
+
+#Plotting correlation between different stocks
+#plot(myreturns.df)
+
+#Plotting the day on day returns trend for all stocks to notice trends
+plot.new()
+par(mfrow = c(2,3))
+plot(myreturns.df$SPY.PctReturn, type = 'l')
+plot(myreturns.df$TLT.PctReturn, type = 'l')
+plot(myreturns.df$LQD.PctReturn, type = 'l')
+plot(myreturns.df$EEM.PctReturn, type = 'l')
+plot(myreturns.df$VNQ.PctReturn, type = 'l')
+
+#Plotting the ACF to pull trends by lags
+plot.new()
+par(mfrow = c(2,3))
+acf(myreturns.df$SPY.PctReturn)
+acf(myreturns.df$TLT.PctReturn)
+acf(myreturns.df$LQD.PctReturn)
+acf(myreturns.df$EEM.PctReturn)
+acf(myreturns.df$VNQ.PctReturn)
+
+```
+
+Plots show autocorrelation at the lag of 5, 10, 25 days etc since similar time in a week or month tend to behave similarly.
+
+To estimate risk n each stock, we can estimate the variancealong with Beta (on the baseline of SPY) in each stock:
+```{r}
+# Using CAPM to estimate portfolio variability
+#Assuming SPY to be the market index
+
+# First fit the market model to each stock
+lm_TLT = lm(myreturns.df$TLT.PctReturn ~ myreturns.df$SPY.PctReturn)
+lm_LQD = lm(myreturns.df$LQD.PctReturn ~ myreturns.df$SPY.PctReturn)
+lm_EEM = lm(myreturns.df$EEM.PctReturn ~ myreturns.df$SPY.PctReturn)
+lm_VNQ = lm(myreturns.df$VNQ.PctReturn ~ myreturns.df$SPY.PctReturn)
+
+# The estimated beta for each stock based on daily returns
+coef(lm_TLT)
+coef(lm_LQD)
+coef(lm_EEM)
+coef(lm_VNQ)
+
+sapply(myreturns.df, var)
+#order(sapply(myreturns.df, sd))
+
+plot.new()
+par(mfrow = c(1,1))
+boxplot(myreturns.df)
+```
+
+We observe that Emerging maret equities(EEM) has maximum volatility, followed by Real estate(VNQ).
+
+Treasury bonds (TLT), Domestic equities(SPY) and Investment grade corporate bonds (LQD) follow in order of volatility in last 5 years.
+
+Volatlity is a measure of risk, hence variance in stocks is a good statistic to help estimate the risk pertaining to stocks. Also, via CAPM on the base line of SPY, we observe that EEM and VNQ have negative betas i.e. they have a tendency of decreasing when the market increases, hence more risky.
+
+On splitting the porfolio across assets equally:
+
+```{r}
+#Computing returns with equal split across portfolio
+
+set.seed(12345)
+
+even.split = foreach(i=1:5000, .combine='rbind') %do% {
+	totalwealth = 100000
+	n_days = 20
+	weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+	for(today in 1:n_days) {
+	  return.today = resample(myreturns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+		#Redistributing the wealth at end of the day
+		holdings = weights * totalwealth
+	}
+	wealthtracker
+}# Now simulate many different possible trading years!
+
+
+hist(even.split[,n_days], 25)
+
+# Profit/loss
+hist(even.split[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(even.split[,n_days], 0.05) - 100000
+
+cbind(quantile(even.split[,n_days], 0.025),quantile(even.split[,n_days], 0.975))
+
+```
+
+There is a possibility of $3,551 loss at 5% value of risk i.e. with 95% confidence, one can argue that the maximum loss expected is $3551. Expected returns of this portfolio is in range of $95,425 to $106,254 on an investment of $100,000
+
+Splitting my investment in safe assets:
+
+Assets with least variance are low-risk/safe assets. We have chosen to invest 60% of money in corporate bonds, since they are least risk and 30% and 10% in domestic equities and Treasury bonds respectively.
+
+```{r}
+#Computing returns with safe split across portfolio
+
+set.seed(12345)
+
+# Now simulate many different possible trading years!
+safe.split = foreach(i=1:5000, .combine='rbind') %do% {
+	totalwealth = 100000
+	n_days = 20
+	weights = c(0.3, 0.1, 0.6, 0, 0)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+	for(today in 1:n_days) {
+	  return.today = resample(myreturns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+		#Redistributing the wealth at end of the day
+		holdings = weights * totalwealth
+	}
+	wealthtracker
+}
+
+hist(safe.split[,n_days], 25)
+
+# Profit/loss
+hist(safe.split[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(safe.split[,n_days], 0.05) - 100000
+
+cbind(quantile(safe.split[,n_days], 0.05),quantile(safe.split[,n_days], 0.95))
+```
+
+Loss at 5% value of risk drops to $1,784.
+
+My returns also drops to the max of $103,313.
+
+The range of returns in a safe portflio at 95% confidence level is  $98,215 to $103,313
+
+Computing returns with aggressive portfolios: 
+
+Agressive portfolios have higher variance as compared to other portfolios and indicate higher risk and may in turn give better returns.
+
+We have chosen to invest 50%-50% in both real estate and equities
+
+```{r}
+#Computing returns with agressive split across portfolio
+
+set.seed(12345)
+
+# Now simulate many different possible trading years!
+aggr.split = foreach(i=1:5000, .combine='rbind') %do% {
+	totalwealth = 100000
+	n_days = 20
+	weights = c(0, 0, 0, 0.5, 0.5)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+	for(today in 1:n_days) {
+	  return.today = resample(myreturns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+		#Redistributing the wealth at end of the day
+		holdings = weights * totalwealth
+	}
+	wealthtracker
+}
+
+hist(aggr.split[,n_days], 25)
+
+# Profit/loss
+hist(aggr.split[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(aggr.split[,n_days], 0.05) - 100000
+
+cbind(quantile(aggr.split[,n_days], 0.025),quantile(aggr.split[,n_days], 0.975))
+
+```
+
+Loss at 5% value of risk increases to $7623.
+
+My returns also changes to the range of $90,504 to $111,404.
+
+Comparising the returns from each investment and estimating return/risk, one can decide on assets to invest in.
+
+#Question 3 - Clustering and PCA
+
+####Objective:
+
+1. Which dimensionality reduction technique makes more sense to you for this data?  
+
+2. Convince yourself (and me) that your chosen method is easily capable of distinguishing the reds from the whites, using only the "unsupervised" information contained in the data on chemical properties
+
+3. Does this technique also seem capable of sorting the higher from the lower quality wines?  
+
+Understanding the data!
+
+```{r}
+set.seed(111)
+library(ggplot2)
+
+#Reading data
+wine.data <- read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/wine.csv")
+
+#head(wine.data)
+
+#Checking unique quality scores
+unique(wine.data$quality)
+
+# Picking out the relevant columns from the data set
+cluster.wine.data = wine.data[,1:11]
+
+# Run PCA
+pca.wine.data = prcomp(cluster.wine.data, scale.=TRUE)
+```
+
+Summarizing PCA objective function to understand the variance captured by each principle component
+
+```{r]}
+summary(pca.wine.data)
+
+#sum((pca.wine.data$sdev)^2)
+
+plot(pca.wine.data)
+
+# An informative biplot
+loadings = pca.wine.data$rotation
+scores = pca.wine.data$x
+#head(scores)
+#nrow(scores)
+```
+
+Plotting clusters around principal components
+
+```{r}
+#Plot PC to determine wine-type capture
+qplot(scores[,1], scores[,2], color=wine.data$color, xlab='Component 1', ylab='Component 2')
+
+#Plotting PC1 vs wine type
+qplot(scores[,1], color=wine.data$color, xlab='Component 1', ylab='Component 2')
+
+#Plotting PC2 vs wine type
+qplot(scores[,2], color=wine.data$color, xlab='Component 1', ylab='Component 2')
+
+```
+
+We notice that PC1 is segmenting red and white around a point, but PC2 alone is unable to do the same.
+
+Following are the best and worst features of PC1:
+```{r}
+o1 = order(loadings[,1])
+
+#Best features
+colnames(cluster.wine.data)[head(o1,3)]
+
+#Worst features
+colnames(cluster.wine.data)[tail(o1,3)]
+```
+
+What aboout wine quality?
+
+```{r}
+#Plot PC to determine quality capture
+qplot(scores[,1], scores[,2], color=wine.data$quality, xlab='Component 1', ylab='Component 2')
+
+```
+
+We notice that Principle component is unable to differentiate between different qualities of wine.
+
+I have tried both heirarchical and K-means clustering technique on the same dataset to determine which technique would segregate the data better.
+
+###Heirarchical clustering
+
+```{r}
+#Scaling the dataset
+cluster.wine.data.scaled <- scale(cluster.wine.data, center=TRUE, scale=TRUE) 
+mu = attr(cluster.wine.data.scaled,"scaled:center")
+sigma = attr(cluster.wine.data.scaled,"scaled:scale")
+
+# Form a pairwise distance matrix using the dist function
+wine_distance_matrix = dist(cluster.wine.data.scaled, method='euclidean')
+
+# Now run hierarchical clustering
+hier_wine = hclust(wine_distance_matrix, method='ward.D')
+
+# Plot the dendrogram
+plot(hier_wine, cex=0.8)
+rect.hclust(hier_wine, k=4, border="red")
+rect.hclust(hier_wine, k=2, border="green")
+
+# Cut the tree into 4 clusters
+cluster4 = cutree(hier_wine, k=4)
+#summary(factor(cluster4))
+
+# Cut the tree into 2 clusters
+cluster2 = cutree(hier_wine, k=2)
+#summary(factor(cluster2))
+
+confusion_maxtrix.color = table(wine.data$color,cluster2)
+round(prop.table(confusion_maxtrix.color, margin = 1),2)
+
+confusion_maxtrix.quality = table(wine.data$quality,cluster4)
+round(prop.table(confusion_maxtrix.quality, margin = 1),2)
+```
+  
+###K-means clustering
+
+```{r}
+#Creating 2 clusters for white and red
+cluster.k.wine <- kmeans(cluster.wine.data.scaled, centers=2, nstart=50)
+
+#Creating 3 clusters to maybe help classify quality in low,medium and high
+cluster.k.wine3 <- kmeans(cluster.wine.data.scaled, centers=3, nstart=50)
+
+# A few plots with cluster membership shown
+qplot(volatile.acidity,sulphates, data=wine.data, color=factor(cluster.k.wine$cluster))
+#qplot(volatile.acidity, chlorides, data=wine.data, color=factor(cluster.k.wine$cluster))
+#qplot(color, quality, data=wine.data, color=factor(cluster.k.wine$cluster))
+
+#qplot(wine.data$color, cluster.k.wine$cluster, data=wine.data, color=factor(cluster.k.wine$cluster))
+
+confusion_maxtrix.color.k = table(wine.data$color,cluster.k.wine$cluster)
+round(prop.table(confusion_maxtrix.color.k, margin = 1),2)
+
+confusion_maxtrix.quality.k = table(wine.data$quality,cluster.k.wine3$cluster)
+round(prop.table(confusion_maxtrix.quality.k, margin = 1),2)
+
+
+#qplot(color, quality, data=wine.data, color=factor(cluster.k.wine3$cluster),cex= 1.2)
+
+```
+
+Although PCA segregates wine type well i.e. wine color to red and white , K-means is classifying around 99% of data points correctly.
+
+K-means is computationally faster, starts by clustering around a centriod rather than using a bottom-up approach like heirarchical and shows excellent classification with just 2 clusters. Hence in this partcular case, K-means is a better classification technique to opt for over both PCA and heirarchical clustering. However, we can use PCA before clustering.
+
+Though the K-means as well as other techniques classify wine-type (color) well, neither of the techniques are capable to sort out the better quality wines from lower quality wines 
+
+#Question 4 - Market Segmentation
+
+####Objective:
+
+1.Your task to is analyze this data as you see fit, and to prepare a report for NutrientH20 that identifies any interesting market segments that appear to stand out in their social-media audience. You have complete freedom in deciding how to pre-process the data and how to define "market segment." (Is it a group of correlated interests?  A cluster? A latent factor?  Etc.)  Just use the data to come up with some interesting, well-supported insights about the audience.
+
+```{r}
+
+social.data <- read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/social_marketing.csv")
+#names(social.data)
+#Removing chatter, photo sharing, uncategorized,spam and adult 
+social.data.clean <- social.data[,-c(2,5,6,36,37)]
+names(social.data.clean)
+
+#Scaling the entire data
+social.data.clean.scaled <- scale(social.data.clean[,-c(1)])
+
+```
+
+Exploring the data
+```{r}
+
+#Summing tweets per person
+social.data.clean$tweets.tot <- rowSums (social.data.clean[,-c(1)], na.rm = FALSE, dims = 1)
+
+#Ordering the data set in the order of highest tweets to the lowest
+social.data.ordered <- social.data.clean[order(-social.data.clean$tweets.tot),] 
+
+#Deciling the dataset
+library(dplyr)
+social.data.ordered$decile <- ntile(social.data.ordered$tweets.tot, 10)  
+
+#Taking a cumulative sum of total tweets to pull of the majority of tweeters
+social.data.ordered <- within(social.data.ordered, acc_sum <- cumsum(tweets.tot))
+```
+
+We observe that people who fall in Top 5 deciles have tweeted around 70% of the total tweets.
+
+Now we just tried exploring user profiles:
+
+```{r}
+#Converting the dataset in relevant format
+aggdata <-as.data.frame(aggregate(social.data.ordered[,-c(1,34:36)],by=list(social.data.ordered$decile),FUN=sum,na.rm=TRUE))
+
+aggdata2<- t(aggdata)
+
+colnames(aggdata2) = aggdata2[1, ] # the first row will be the header
+aggdata2 = aggdata2[-1, ] 
+
+aggdata.rowsum <- as.data.frame(round(aggdata2/rowSums(aggdata2),3)*100)
+aggdata.colsum <- as.data.frame(round(t(t(aggdata2)/colSums(aggdata2)),3)*100)
+
+rownames(aggdata.colsum)[which.max(aggdata.colsum$`10`)]
+```
+
+People who tweet the most tweet about health & nutrition
+
+```{r}
+rownames(aggdata.colsum)[which.min(aggdata.colsum$`10`)]
+```
+
+People who tweet the most tweet least about small businesses
+
+```{r}
+rownames(aggdata.colsum)[which.max(aggdata.colsum$`1`)]
+```
+
+People who tweet the least mostly tweet on current events
+
+After trying multiple clusters at random, I observed that adding clusters was segregating the smaller clusters more than the main cluster. Hence, 5 clusters seemed optimum:
+
+```{r}
+set.seed(1335)
+k.social <- kmeans(social.data.clean.scaled, centers= 5, nstart=50)
+
+k.social$size
+#One cluster is predominantly dominant over others
+
+library(ggplot2)
+library(cluster)
+clusplot(social.data.clean,k.social$cluster,color = TRUE,shade=FALSE,labels=0,lines=0, cex = 0.4)
+
+rbind(k.social$center[1,],(k.social$center[1,]*sigma + mu))
+#sports, personal fitness
+
+rbind(k.social$center[2,],(k.social$center[2,]*sigma + mu))
+#school, cooking
+
+rbind(k.social$center[3,],(k.social$center[3,]*sigma + mu))
+#travel, sports fandom,eco and craft
+
+rbind(k.social$center[4,],(k.social$center[4,]*sigma + mu))
+#No distinct interests. They talk about everything - Generic cluster
+
+rbind(k.social$center[5,],(k.social$center[5,]*sigma + mu))
+#food and dating
+```
+
+On observing the data, we come across 5 distinct segments. Though we have a huge over-powering generic segment, we have 4 distinctly classfied segments who NutrientH20 can target.
+
+We see sports players and people who focus on personal fitness in one segment. NutrientH20 can direct sports and fitness related campaigns to this cluster.
+
+The second cluster mainly comprises of people who tweet about school and cooking. They seem to be families. NutrientH20 can direct family, parenting related or cooking related campigns to members in this cluster.
+
+The third distinct cluster mainly comprises of travellers and sports fans. They could be sports fans who traveled to watch sports or just travellers. NutrientH20 has a good base to direct all their travel, sports mascots, camping, hiking campaigns.
+
+The fourth cluster mostly tweets about food and dating. It would be safe to assume that this cluster comprises of unmarried people who would be in their twenties or thirties. This cluster seems to be more open to trying out new restaurents in the town. NutrientH20 can target this cluster with gifting ideas or suggestions to new places and restaurents in town. They can also target this segment with new products which appeal to the youth.
+
+The fifth and the final cluster is generic and people comrising this segment do not talk about anything specific.
+
