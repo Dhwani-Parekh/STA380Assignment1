@@ -138,20 +138,6 @@ ggmap(map) + geom_point(data = subset(delay.map,delay.map$AnnualFlights> median(
 
 Flights to Washington Dulles International Airport, Virginia and Newark Liberty International Airport, New Jersey were worst hit with respect to departure delay in 2008. They were closely followed by flights to O'Hare International Airport, Chicago.
 
-```{r, echo = FALSE}
-#?get_map
-#----#
-
-#map <- get_map(location = 'USA', zoom = 4)
-#mapPoints <- ggmap(map) + geom_point(aes(x = delay.map$Longitude, y = delay.map$Latitude,data = delay.map, alpha = .5)) + expand_limits(x = delay.map$Longitude, y = delay.map$Latitude)
-
-#map1 <- ggmap(map, extent='panel', base_layer=ggplot(delay.map, aes(x=delay.map$Longitude, y=delay.map$Latitude)))
-#map.airports <- map1 + geom_point(color = "blue", size = sqrt(delay.map$AverageDelayTime)) + labs(title="Destiation Airports", x="Longitude", y="Latitude") + theme(plot.title = element_text(hjust = 0, vjust = 1, face = c("bold")))
-
-#print(map.airports)
-
-```
-
 Looking at time plots: Which is the worst time to fly out of Austin?
 
 ```{r}
